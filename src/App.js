@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
+import { useRandomForest } from './services/RandomForestService';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, 
   PieChart, Pie, Cell, ResponsiveContainer 
 } from 'recharts';
 
 function App() {
+  const { predict, status } = useRandomForest();
   const [page, setPage] = useState('home');
   const [prediction, setPrediction] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loadingPrediction, setLoadingPrediction] = useState(false);
   const [modelMetrics, setModelMetrics] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -60,8 +62,8 @@ function App() {
               <div className="flex items-center">
                 <div className="flex-shrink-0 flex items-center">
                   <div className="h-8 w-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg"></div>
-                  <span className="ml-3 text-xl font-bold text-gray-800 hidden sm:block">MedPredict AI</span>
-                  <span className="ml-3 text-xl font-bold text-gray-800 sm:hidden">MP AI</span>
+                  <span className="ml-3 text-xl font-bold text-gray-800 hidden sm:block">SwasthyaNirikha</span>
+                  <span className="ml-3 text-xl font-bold text-gray-800 sm:hidden">SN AI</span>
                 </div>
               </div>
               <div className="flex items-center space-x-2 sm:space-x-4">
@@ -198,31 +200,30 @@ function App() {
   const PredictPage = () => {
     const { register, handleSubmit, formState: { errors }, reset } = useForm();
     
-    // Updated symptoms data with ALL symptoms your model expects
     const symptomsData = [
-      { id: 1, name: 'Fever', count: 227 },
-      { id: 2, name: 'Cough', count: 152 },
-      { id: 3, name: 'Headache', count: 119 },
-      { id: 4, name: 'Thirst', count: 115 },
-      { id: 5, name: 'Body Pain', count: 103 },
-      { id: 6, name: 'Frequent Urination', count: 95 },
-      { id: 7, name: 'Dizziness', count: 90 },
-      { id: 8, name: 'Fatigue', count: 82 },
-      { id: 9, name: 'Chills', count: 64 },
-      { id: 10, name: 'Weakness', count: 55 },
-      { id: 11, name: 'Weight Loss', count: 47 },
-      { id: 12, name: 'Breathing Difficulty', count: 34 },
-      { id: 13, name: 'Dry Mouth', count: 22 },
-      { id: 14, name: 'Fainting', count: 20 },
-      { id: 15, name: 'Low Activity', count: 15 },
-      { id: 16, name: 'Chest Pain', count: 25 },
-      { id: 17, name: 'Nausea', count: 18 }
+      { id: 1, name: 'Fever' },
+      { id: 2, name: 'Cough' },
+      { id: 3, name: 'Headache' },
+      { id: 4, name: 'Thirst' },
+      { id: 5, name: 'Body Pain' },
+      { id: 6, name: 'Frequent Urination' },
+      { id: 7, name: 'Dizziness' },
+      { id: 8, name: 'Fatigue' },
+      { id: 9, name: 'Chills' },
+      { id: 10, name: 'Weakness' },
+      { id: 11, name: 'Weight Loss' },
+      { id: 12, name: 'Breathing Difficulty' },
+      { id: 13, name: 'Dry Mouth' },
+      { id: 14, name: 'Fainting' },
+      { id: 15, name: 'Low Activity' },
+      { id: 16, name: 'Chest Pain' }
     ];
 
     // Symptoms state
     const [selectedSymptoms, setSelectedSymptoms] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const [symptomsError, setSymptomsError] = useState('');
 
     // Filter symptoms based on search
     const filteredSymptoms = symptomsData.filter(symptom =>
@@ -236,6 +237,7 @@ function App() {
       } else {
         setSelectedSymptoms([...selectedSymptoms, symptom]);
       }
+      setSymptomsError('');
     };
 
     // Remove selected symptom
@@ -246,170 +248,120 @@ function App() {
     // Clear all symptoms
     const clearAllSymptoms = () => {
       setSelectedSymptoms([]);
+      setSymptomsError('');
     };
 
-    // Your Koyeb API URL
-    const API_URL = "https://thorough-alberta-deeplearners-297709b6.koyeb.app";
-
     const onSubmit = async (data) => {
-      setLoading(true);
+      if (!status.loaded) {
+        alert('Model is still loading. Please wait...');
+        return;
+      }
+      
+      // Validate symptoms
+      if (selectedSymptoms.length === 0) {
+        setSymptomsError('Please select at least one symptom');
+        return;
+      }
+      
+      setLoadingPrediction(true);
       setPrediction(null);
       
       try {
-        // Map symptoms to 0/1 format
-        const symptomMap = {
-          'Fever': 'symptom_fever',
-          'Cough': 'symptom_cough',
-          'Headache': 'symptom_headache',
-          'Thirst': 'symptom_thirst',
-          'Body Pain': 'symptom_body_pain',
-          'Frequent Urination': 'symptom_frequent_urination',
-          'Dizziness': 'symptom_dizziness',
-          'Fatigue': 'symptom_fatigue',
-          'Chills': 'symptom_chills',
-          'Weakness': 'symptom_weakness',
-          'Weight Loss': 'symptom_weight_loss',
-          'Breathing Difficulty': 'symptom_breathing_difficulty',
-          'Dry Mouth': 'symptom_dry_mouth',
-          'Fainting': 'symptom_fainting',
-          'Low Activity': 'symptom_low_activity',
-          'Chest Pain': 'symptom_chest_pain',
-          'Nausea': 'symptom_nausea'
+        // Prepare form data with symptoms
+        const formData = {
+          ...data,
+          symptoms: selectedSymptoms.map(s => s.id)
         };
         
-        // Prepare symptom data (all 0 by default)
-        const symptomData = {};
-        Object.values(symptomMap).forEach(key => symptomData[key] = 0);
+        console.log('Submitting form data:', formData);
         
-        // Set selected symptoms to 1
-        selectedSymptoms.forEach(symptom => {
-          const key = symptomMap[symptom.name];
-          if (key) symptomData[key] = 1;
-        });
+        const result = predict(formData);
         
-        // Prepare payload for your Koyeb API
-        const payload = {
-          Age: parseInt(data.age),
-          Gender: data.gender,
-          Systolic_BP: parseInt(data.systolic),
-          Diastolic_BP: parseInt(data.diastolic),
-          Body_Temperature_Celsius: parseFloat(data.temp),
-          Heart_Rate_bpm: parseInt(data.heartRate),
-          Blood_Sugar_mg_dL: parseInt(data.bloodSugar),
-          BMI: parseFloat(data.bmi),
-          // Add ALL symptoms (including ones that should be 0)
-          symptom_body_pain: symptomData.symptom_body_pain || 0,
-          symptom_breathing_difficulty: symptomData.symptom_breathing_difficulty || 0,
-          symptom_chest_pain: symptomData.symptom_chest_pain || 0,
-          symptom_chills: symptomData.symptom_chills || 0,
-          symptom_cough: symptomData.symptom_cough || 0,
-          symptom_dizziness: symptomData.symptom_dizziness || 0,
-          symptom_dry_mouth: symptomData.symptom_dry_mouth || 0,
-          symptom_fainting: symptomData.symptom_fainting || 0,
-          symptom_fatigue: symptomData.symptom_fatigue || 0,
-          symptom_fever: symptomData.symptom_fever || 0,
-          symptom_frequent_urination: symptomData.symptom_frequent_urination || 0,
-          symptom_headache: symptomData.symptom_headache || 0,
-          symptom_low_activity: symptomData.symptom_low_activity || 0,
-          symptom_nausea: symptomData.symptom_nausea || 0,
-          symptom_thirst: symptomData.symptom_thirst || 0,
-          symptom_weakness: symptomData.symptom_weakness || 0,
-          symptom_weight_loss: symptomData.symptom_weight_loss || 0
-        };
-
-        console.log('Sending payload:', payload);
-
-        // Call your Koyeb API
-        const response = await fetch(`${API_URL}/api/predict`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.detail || 'API request failed');
-        }
-
-        const result = await response.json();
-        
-        // Format the result for your UI
+        // Format result for UI
         const formattedPrediction = {
           disease: result.disease,
           confidence: result.confidence,
-          recommendations: result.recommendations || [
-            "Consult a healthcare provider",
-            "Monitor your symptoms",
-            "Follow up if condition worsens"
-          ],
-          risk_level: result.risk_level || 'Medium',
-          top_predictions: result.top_predictions || []
+          treeCount: result.treeCount,
+          probabilities: result.probabilities,
+          diseases: result.diseases,
+          recommendations: getRecommendations(result.disease),
+          risk_level: getRiskLevel(result.disease)
         };
         
         setPrediction(formattedPrediction);
         
       } catch (error) {
         console.error('Prediction error:', error);
-        
-        // Fallback to mock data if API fails
-        const mockPrediction = getMockPrediction(data);
-        setPrediction(mockPrediction);
-        
-        // Show error toast
-        alert(`API Error: ${error.message}. Using fallback prediction.`);
+        alert('Prediction failed: ' + error.message);
       } finally {
-        setLoading(false);
+        setLoadingPrediction(false);
       }
     };
 
-    // Fallback mock prediction function
-    const getMockPrediction = (data) => {
-      if (data.systolic > 140 || data.diastolic > 90) {
-        return {
-          disease: "Hypertension (Stage 2)",
-          confidence: 0.92,
-          recommendations: [
-            "Consult a cardiologist within 48 hours",
-            "Monitor blood pressure twice daily",
-            "Reduce sodium intake to less than 1500mg/day",
-            "Begin light aerobic exercise (30 mins, 5x/week)"
-          ],
-          risk_level: "High",
-        };
-      } else if (data.bloodSugar > 126) {
-        return {
-          disease: "Type 2 Diabetes",
-          confidence: 0.87,
-          recommendations: [
-            "Consult an endocrinologist",
-            "Monitor fasting blood sugar levels",
-            "Follow diabetic diet (low glycemic index)",
-            "Regular HbA1c check every 3 months"
-          ],
-          risk_level: "Medium",
-        };
-      } else if (data.temp > 37.5) {
-        return {
-          disease: "Viral Fever",
-          confidence: 0.78,
-          recommendations: [
-            "Get plenty of rest",
-            "Stay hydrated",
-            "Take antipyretics if needed",
-            "Consult if fever persists >3 days"
-          ],
-          risk_level: "Low",
-        };
-      } else {
-        return {
-          disease: "Healthy/Normal Range",
-          confidence: 0.95,
-          recommendations: ["Maintain current healthy lifestyle", "Annual comprehensive check-up recommended"],
-          risk_level: "Low",
-        };
-      }
+    // Helper functions
+    const getRecommendations = (disease) => {
+      const recommendations = {
+        'Hypertension': [
+          "Monitor blood pressure twice daily",
+          "Reduce sodium intake to <1500mg/day",
+          "Consult cardiologist within 48 hours"
+        ],
+        'Diabetes': [
+          "Check fasting blood sugar levels",
+          "Follow diabetic diet plan",
+          "Consult endocrinologist"
+        ],
+        'Viral_Fever': [
+          "Get plenty of rest",
+          "Stay hydrated",
+          "Take antipyretics if needed"
+        ],
+        'Cardiac_Risk': [
+          "Immediate ECG recommended",
+          "Avoid strenuous activity",
+          "Emergency consultation needed"
+        ],
+        'Anemia': [
+          "Increase iron-rich foods in diet",
+          "Consider iron supplements",
+          "Consult hematologist"
+        ],
+        'Respiratory_Infection': [
+          "Rest and stay hydrated",
+          "Use humidifier",
+          "Consult if symptoms worsen"
+        ],
+        'Hypotension': [
+          "Increase salt intake moderately",
+          "Stay hydrated",
+          "Avoid sudden position changes"
+        ],
+        'Malnutrition': [
+          "Balanced diet with proper nutrients",
+          "Consult nutritionist",
+          "Regular health check-ups"
+        ],
+        'Obesity_Risk': [
+          "Regular exercise regimen",
+          "Balanced calorie-controlled diet",
+          "Consult dietitian"
+        ]
+      };
+      
+      return recommendations[disease] || [
+        "Consult healthcare provider",
+        "Monitor your symptoms",
+        "Follow up if condition worsens"
+      ];
+    };
+
+    const getRiskLevel = (disease) => {
+      const highRisk = ['Cardiac_Risk', 'Hypertension'];
+      const mediumRisk = ['Diabetes', 'Respiratory_Infection'];
+      
+      if (highRisk.includes(disease)) return 'High';
+      if (mediumRisk.includes(disease)) return 'Medium';
+      return 'Low';
     };
 
     return (
@@ -446,6 +398,38 @@ function App() {
             </p>
           </div>
 
+          {/* Model Status */}
+          <div className={`mb-6 p-4 rounded-lg ${status.loaded ? 'bg-green-100' : status.loading ? 'bg-yellow-100' : 'bg-red-100'}`}>
+            {status.loading ? (
+              <div className="flex items-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-600 mr-3"></div>
+                <span>Downloading AI model: {status.progress}%</span>
+                <div className="ml-4 w-48 bg-gray-200 rounded-full h-2">
+                  <div className="bg-yellow-500 h-2 rounded-full" style={{ width: `${status.progress}%` }}></div>
+                </div>
+              </div>
+            ) : status.loaded ? (
+              <div className="flex items-center text-green-800">
+                <span className="mr-2">✓</span>
+                <span>AI Model ready! Running locally on your device.</span>
+              </div>
+            ) : (
+              <div className="text-red-800">
+                ⚠️ Model failed to load: {status.error}
+              </div>
+            )}
+          </div>
+            {/* Offline Status */}
+{status.isOffline && (
+  <div className="mb-4 p-3 rounded-lg bg-blue-100 border border-blue-300">
+    <div className="flex items-center text-blue-800">
+      <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4 4 0 003 15z" />
+      </svg>
+      <span>Working offline with cached model</span>
+    </div>
+  </div>
+)}
           <div className="flex flex-col lg:flex-row gap-4 sm:gap-6 lg:gap-8">
             {/* Form Section */}
             <div className="lg:w-2/3">
@@ -459,12 +443,21 @@ function App() {
                       </label>
                       <input
                         type="number"
-                        {...register('age', { required: 'Age is required' })}
+                        {...register('age', { 
+                          required: 'Age is required',
+                          min: { value: 0, message: 'Age must be positive' },
+                          max: { value: 120, message: 'Age must be less than 120' }
+                        })}
                         className="w-full px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                         placeholder="e.g., 35"
                       />
                       {errors.age && (
-                        <p className="mt-1 text-sm text-red-600">{errors.age.message}</p>
+                        <p className="mt-1 text-sm text-red-600 flex items-center">
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          {errors.age.message}
+                        </p>
                       )}
                     </div>
 
@@ -481,7 +474,12 @@ function App() {
                         <option value="Female">Female</option>
                       </select>
                       {errors.gender && (
-                        <p className="mt-1 text-sm text-red-600">{errors.gender.message}</p>
+                        <p className="mt-1 text-sm text-red-600 flex items-center">
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          {errors.gender.message}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -496,24 +494,42 @@ function App() {
                         <label className="block text-sm font-medium text-gray-700 mb-1">Systolic BP*</label>
                         <input
                           type="number"
-                          {...register('systolic', { required: 'Systolic BP is required' })}
+                          {...register('systolic', { 
+                            required: 'Systolic BP is required',
+                            min: { value: 50, message: 'Systolic BP must be at least 50' },
+                            max: { value: 250, message: 'Systolic BP must be less than 250' }
+                          })}
                           className="w-full px-3 sm:px-4 py-2 sm:py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500"
                           placeholder="e.g., 120"
                         />
                         {errors.systolic && (
-                          <p className="mt-1 text-sm text-red-600">{errors.systolic.message}</p>
+                          <p className="mt-1 text-sm text-red-600 flex items-center">
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {errors.systolic.message}
+                          </p>
                         )}
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Diastolic BP*</label>
                         <input
                           type="number"
-                          {...register('diastolic', { required: 'Diastolic BP is required' })}
+                          {...register('diastolic', { 
+                            required: 'Diastolic BP is required',
+                            min: { value: 30, message: 'Diastolic BP must be at least 30' },
+                            max: { value: 150, message: 'Diastolic BP must be less than 150' }
+                          })}
                           className="w-full px-3 sm:px-4 py-2 sm:py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500"
                           placeholder="e.g., 80"
                         />
                         {errors.diastolic && (
-                          <p className="mt-1 text-sm text-red-600">{errors.diastolic.message}</p>
+                          <p className="mt-1 text-sm text-red-600 flex items-center">
+                            <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {errors.diastolic.message}
+                          </p>
                         )}
                       </div>
                     </div>
@@ -526,12 +542,21 @@ function App() {
                       <input
                         type="number"
                         step="0.1"
-                        {...register('temp', { required: 'Temperature is required' })}
+                        {...register('temp', { 
+                          required: 'Temperature is required',
+                          min: { value: 34, message: 'Temperature must be at least 34°C' },
+                          max: { value: 42, message: 'Temperature must be less than 42°C' }
+                        })}
                         className="w-full px-3 sm:px-4 py-2 sm:py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500"
                         placeholder="e.g., 36.6"
                       />
                       {errors.temp && (
-                        <p className="mt-1 text-sm text-red-600">{errors.temp.message}</p>
+                        <p className="mt-1 text-sm text-red-600 flex items-center">
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          {errors.temp.message}
+                        </p>
                       )}
                     </div>
 
@@ -539,12 +564,21 @@ function App() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Heart Rate (bpm)*</label>
                       <input
                         type="number"
-                        {...register('heartRate', { required: 'Heart rate is required' })}
+                        {...register('heartRate', { 
+                          required: 'Heart rate is required',
+                          min: { value: 40, message: 'Heart rate must be at least 40 bpm' },
+                          max: { value: 200, message: 'Heart rate must be less than 200 bpm' }
+                        })}
                         className="w-full px-3 sm:px-4 py-2 sm:py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500"
                         placeholder="e.g., 72"
                       />
                       {errors.heartRate && (
-                        <p className="mt-1 text-sm text-red-600">{errors.heartRate.message}</p>
+                        <p className="mt-1 text-sm text-red-600 flex items-center">
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          {errors.heartRate.message}
+                        </p>
                       )}
                     </div>
 
@@ -552,12 +586,21 @@ function App() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Blood Sugar (mg/dL)*</label>
                       <input
                         type="number"
-                        {...register('bloodSugar', { required: 'Blood sugar is required' })}
+                        {...register('bloodSugar', { 
+                          required: 'Blood sugar is required',
+                          min: { value: 50, message: 'Blood sugar must be at least 50 mg/dL' },
+                          max: { value: 500, message: 'Blood sugar must be less than 500 mg/dL' }
+                        })}
                         className="w-full px-3 sm:px-4 py-2 sm:py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500"
                         placeholder="e.g., 95"
                       />
                       {errors.bloodSugar && (
-                        <p className="mt-1 text-sm text-red-600">{errors.bloodSugar.message}</p>
+                        <p className="mt-1 text-sm text-red-600 flex items-center">
+                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          {errors.bloodSugar.message}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -568,16 +611,25 @@ function App() {
                     <input
                       type="number"
                       step="0.1"
-                      {...register('bmi', { required: 'BMI is required' })}
+                      {...register('bmi', { 
+                        required: 'BMI is required',
+                        min: { value: 10, message: 'BMI must be at least 10' },
+                        max: { value: 50, message: 'BMI must be less than 50' }
+                      })}
                       className="w-full px-3 sm:px-4 py-2 sm:py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500"
                       placeholder="e.g., 22.5"
                     />
                     {errors.bmi && (
-                      <p className="mt-1 text-sm text-red-600">{errors.bmi.message}</p>
+                      <p className="mt-1 text-sm text-red-600 flex items-center">
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        {errors.bmi.message}
+                      </p>
                     )}
                   </div>
 
-                  {/* Symptoms Multi-Select Section */}
+                  {/* Symptoms Section - FIXED */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       <span className="flex items-center">
@@ -698,10 +750,7 @@ function App() {
                                   >
                                     <div className="flex items-center">
                                       <div className={`w-3 h-3 rounded-full mr-3 ${isSelected ? 'bg-blue-500' : 'bg-gray-300'}`}></div>
-                                      <div>
-                                        <div className="font-medium text-gray-800">{symptom.name}</div>
-                                        <div className="text-xs text-gray-500">{symptom.count} cases reported</div>
-                                      </div>
+                                      <div className="font-medium text-gray-800">{symptom.name}</div>
                                     </div>
                                     {isSelected ? (
                                       <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -730,7 +779,7 @@ function App() {
                       )}
                     </div>
 
-                    {/* Selected Symptoms Count */}
+                    {/* Selected Symptoms Count and Error */}
                     <div className="mt-3 flex justify-between items-center">
                       <div className="text-sm text-gray-600">
                         {selectedSymptoms.length} symptom{selectedSymptoms.length !== 1 ? 's' : ''} selected
@@ -747,22 +796,13 @@ function App() {
                       </button>
                     </div>
 
-                    {/* Hidden input to store selected symptoms for form submission */}
-                    <input
-                      type="hidden"
-                      {...register('symptoms', {
-                        required: 'At least one symptom is required',
-                        validate: () => selectedSymptoms.length > 0 || 'Please select at least one symptom'
-                      })}
-                      value={selectedSymptoms.map(s => s.name).join(', ')}
-                    />
-
-                    {errors.symptoms && (
+                    {/* Symptoms Error Message */}
+                    {symptomsError && (
                       <p className="mt-2 text-sm text-red-600 flex items-center">
                         <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        {errors.symptoms.message}
+                        {symptomsError}
                       </p>
                     )}
                   </div>
@@ -771,10 +811,10 @@ function App() {
                   <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 pt-4">
                     <button
                       type="submit"
-                      disabled={loading}
+                      disabled={!status.loaded || loadingPrediction}
                       className="bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-4 sm:px-6 rounded-lg font-bold hover:shadow-xl disabled:opacity-50 flex-1 flex items-center justify-center gap-2"
                     >
-                      {loading ? (
+                      {loadingPrediction ? (
                         <>
                           <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
                           {isMobile ? 'Analyzing...' : 'Analyzing Data...'}
@@ -795,6 +835,7 @@ function App() {
                         reset();
                         setSelectedSymptoms([]);
                         setSearchTerm('');
+                        setSymptomsError('');
                       }}
                       className="px-4 sm:px-6 py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 flex-1 sm:flex-none"
                     >
@@ -817,12 +858,38 @@ function App() {
                     {/* Disease Card */}
                     <div className="p-4 sm:p-6 rounded-xl text-center bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200">
                       <div className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-800 mb-2">
-                        {prediction.disease}
+                        {prediction.disease.replace('_', ' ')}
                       </div>
                       <div className="inline-flex items-center px-3 sm:px-4 py-1 sm:py-2 bg-white rounded-full">
                         <span className="font-bold text-gray-800 text-sm sm:text-base">
                           Confidence: {(prediction.confidence * 100).toFixed(1)}%
                         </span>
+                      </div>
+                      <div className="text-sm text-gray-600 mt-2">
+                        Based on {prediction.treeCount} decision trees running locally
+                      </div>
+                    </div>
+
+                    {/* All Probabilities */}
+                    <div className="bg-white p-3 sm:p-5 rounded-xl border">
+                      <h3 className="font-bold text-gray-700 mb-3">All Probabilities</h3>
+                      <div className="space-y-3">
+                        {prediction.probabilities.map((prob, idx) => (
+                          <div key={idx} className="space-y-1">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-gray-700">
+                                {prediction.diseases?.[idx]?.replace('_', ' ') || `Disease ${idx + 1}`}
+                              </span>
+                              <span className="font-bold text-blue-600">{(prob * 100).toFixed(1)}%</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-blue-500 h-2 rounded-full" 
+                                style={{ width: `${prob * 100}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -857,26 +924,12 @@ function App() {
                       </div>
                     </div>
 
-                    {/* Top Predictions (if available) */}
-                    {prediction.top_predictions && prediction.top_predictions.length > 0 && (
-                      <div className="p-3 sm:p-5 rounded-xl border">
-                        <h3 className="font-bold text-gray-700 mb-3">Alternative Diagnoses</h3>
-                        <div className="space-y-2">
-                          {prediction.top_predictions.slice(0, 3).map((pred, idx) => (
-                            <div key={idx} className="flex justify-between items-center">
-                              <span className="text-gray-700">{pred.disease}</span>
-                              <span className="font-bold text-blue-600">{pred.percentage}%</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
                     <button
                       onClick={() => {
                         setPrediction(null);
                         reset();
                         setSelectedSymptoms([]);
+                        setSymptomsError('');
                       }}
                       className="w-full py-3 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
                     >
