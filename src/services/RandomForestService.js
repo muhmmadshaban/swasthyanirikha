@@ -195,10 +195,28 @@ class RandomForestService {
       'weight_loss': 23
     };
     
-    // Set symptom values
+    // Set symptom values - FIXED ERROR HERE
     if (formData.symptoms && Array.isArray(formData.symptoms)) {
       formData.symptoms.forEach(symptomName => {
-        const symptomKey = symptomMapping[symptomName.toLowerCase()];
+        // FIX: Check if symptomName exists and is a string
+        if (!symptomName || typeof symptomName !== 'string') return;
+        
+        // FIX: Clean and lowercase the symptom name
+        const cleanSymptom = symptomName.toString().toLowerCase().trim();
+        
+        // Find mapping - try exact match first
+        let symptomKey = symptomMapping[cleanSymptom];
+        
+        // If not found, try to find by partial match
+        if (!symptomKey) {
+          for (const [key, value] of Object.entries(symptomMapping)) {
+            if (cleanSymptom.includes(key) || key.includes(cleanSymptom)) {
+              symptomKey = value;
+              break;
+            }
+          }
+        }
+        
         if (symptomKey && symptomPositions[symptomKey] !== undefined) {
           features[symptomPositions[symptomKey]] = 1;
         }
