@@ -1,8 +1,0 @@
-{
-  "buildCommand": "./build.sh",
-  "installCommand": "npm install --legacy-peer-deps",
-  "outputDirectory": "build",
-  "framework": "create-react-app",
-  "regions": ["iad1"],
-  "nodeVersion": "18.x"
-}
